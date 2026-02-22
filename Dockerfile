@@ -1,4 +1,4 @@
-# Stage 1: Build React app with Node 24
+# Stage 1: Build React Router app with Node 24
 FROM node:24-alpine as build
 
 WORKDIR /app
@@ -9,18 +9,26 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# Stage 2: Serve static build with NGINX
-FROM nginx:alpine
+# Stage 2: Production runtime with Node 24
+FROM node:24-alpine
 
-# Copy React Router build output to NGINX (build/ contains index.html and assets)
-COPY --from=build /app/build /usr/share/nginx/html
+WORKDIR /app
 
-# Copy NGINX config
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copy package files
+COPY package*.json ./
 
-# Copy public/ folder (includes env.js) to NGINX
-COPY public/ /usr/share/nginx/html/
+# Copy built app (both client and server)
+COPY --from=build /app/build ./build
 
-EXPOSE 80
+# Copy public folder (includes env.js)
+COPY public ./public
 
-CMD ["nginx", "-g", "daemon off;"]
+# Install production dependencies only
+RUN npm ci --omit=dev
+
+# Expose port and set environment
+ENV PORT=4001
+EXPOSE 4001
+
+# Start the server
+CMD ["npm", "run", "start"]

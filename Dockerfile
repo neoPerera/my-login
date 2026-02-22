@@ -1,27 +1,26 @@
-FROM node:24-alpine AS development-dependencies-env
-COPY . /app
+# Stage 1: Build React app with Node 24
+FROM node:24-alpine as build
+
 WORKDIR /app
+
+COPY package*.json ./
 RUN npm ci
 
-FROM node:24-alpine AS production-dependencies-env
-COPY ./package.json package-lock.json /app/
-# Copy public/env.js into the build context so it is available during build
-COPY public/env.js /app/public/env.js
-WORKDIR /app
-RUN npm ci --omit=dev
-
-FROM node:24-alpine AS build-env
-COPY . /app/
-COPY --from=development-dependencies-env /app/node_modules /app/node_modules
-WORKDIR /app
+COPY . .
 RUN npm run build
 
-FROM node:24-alpine
-COPY ./package.json package-lock.json /app/
-COPY public/env.js /app/public/env.js
-COPY --from=production-dependencies-env /app/node_modules /app/node_modules
-COPY --from=build-env /app/build /app/build
-WORKDIR /app
-ENV PORT=4001
-EXPOSE 4001
-CMD ["npm", "run", "start"]
+# Stage 2: Serve static build with NGINX
+FROM nginx:alpine
+
+# Copy React Router build output (static client files) to NGINX
+COPY --from=build /app/build/client /usr/share/nginx/html
+
+# Copy NGINX config
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Copy public/ folder (includes env.js) to NGINX
+COPY public/ /usr/share/nginx/html/
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
